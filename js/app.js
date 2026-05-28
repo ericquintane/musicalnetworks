@@ -3,8 +3,8 @@ import { STYLES } from './styles.js';
 import { buildMusicalEvents, availableAttributeKeys, distinctValues, attributeValue } from './mapping.js';
 import { play, stop } from './player.js';
 import { renderNetwork, flashEvent, colorsForActors } from './viz.js';
-import { renderChord } from './chord_viz.js';
 import { renderPianoRoll, updatePianoPlayhead, resetPianoPlayhead } from './piano_roll.js';
+import { renderSonia, soniaFlash, soniaTick, soniaReset } from './sonia_viz.js';
 import { exportMIDI } from './midi.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -165,14 +165,20 @@ function activeRegisterKey() {
 }
 
 function renderViz() {
-  // Render all three vizes so switching tabs is instant and stays in sync
+  // Render all visualisations so switching tabs is instant and stays in sync
   // with the current data / mapping / mute state. Each render is cheap
-  // (10-100ms even on the dense datasets); doing it once on each change
-  // beats showing stale content the moment a tab is switched.
+  // (10-100ms even on dense datasets); doing it once on each change beats
+  // showing stale content the moment a tab is switched.
+  //
+  // SONIA's force layout costs ~1-2s on >300 nodes, so only render it when
+  // its tab is the active one, and cache positions thereafter.
   const key = activeRegisterKey();
-  renderNetwork($('#network-viz'), state.rem.actors, key, state.muted);
-  renderChord($('#chord-viz'), state.rem, key, state.muted);
+  renderNetwork($('#network-viz'), state.rem, key, state.muted);
   renderPianoRoll($('#piano-roll'), state.rem, key, state.muted);
+  if (currentViz === 'sonia') {
+    soniaReset();
+    renderSonia($('#sonia-viz'), state.rem, key, state.muted);
+  }
 }
 
 function switchViz(mode) {
@@ -184,27 +190,36 @@ function switchViz(mode) {
   // Show the relevant per-tab help line.
   const active = document.querySelector(`.viz-tab[data-viz="${mode}"]`);
   $('#viz-help').textContent = active ? (active.dataset.help || '') : '';
-  renderViz();
+  // SONIA needs a fresh force layout when its tab becomes active.
+  if (mode === 'sonia') {
+    soniaReset();
+    renderSonia($('#sonia-viz'), state.rem, activeRegisterKey(), state.muted);
+  } else {
+    renderViz();
+  }
 }
 
 function startPlayheadLoop() {
   cancelAnimationFrame(playheadRAF);
   const Tone = window.Tone;
   const totalDuration = effectiveStyle().durationSeconds;
-  const tick = () => {
+  const tick = (now) => {
     if (!isPlaying) return;
     if (currentViz === 'piano') {
       const t = Tone.Transport.seconds;
       updatePianoPlayhead($('#piano-roll'), t / Math.max(totalDuration, 0.001));
+    } else if (currentViz === 'sonia') {
+      soniaTick($('#sonia-viz'), now);
     }
     playheadRAF = requestAnimationFrame(tick);
   };
-  tick();
+  playheadRAF = requestAnimationFrame(tick);
 }
 
 function stopPlayheadLoop() {
   cancelAnimationFrame(playheadRAF);
   resetPianoPlayhead($('#piano-roll'));
+  soniaReset();
 }
 
 // ---- Summary / credit ----------------------------------------------------
@@ -242,6 +257,8 @@ function effectiveStyle() {
 function onTick(musicalEvent) {
   if (currentViz === 'network') {
     flashEvent($('#network-viz'), musicalEvent.raw.sender, musicalEvent.raw.receiver);
+  } else if (currentViz === 'sonia') {
+    soniaFlash($('#sonia-viz'), musicalEvent.raw.sender, musicalEvent.raw.receiver, activeRegisterKey(), state.rem);
   }
   const sName = state.rem.actors.find(a => String(a.id) === String(musicalEvent.raw.sender))?.name || musicalEvent.raw.sender;
   const rName = state.rem.actors.find(a => String(a.id) === String(musicalEvent.raw.receiver))?.name || musicalEvent.raw.receiver;
