@@ -19,15 +19,24 @@ export function generateSyntheticREM({
 } = {}) {
   const rand = makeRng(seed);
 
-  // Actors: split into two groups with one broker in the middle.
+  // Actors: split into two groups with one broker in the middle, plus a
+  // synthetic `level` attribute so the Sound Mapping panel has something to
+  // experiment with on synthetic data.
   const half = Math.floor(nActors / 2);
+  const levels = ['1-junior', '2-mid', '3-senior'];
   const actors = [];
   for (let i = 0; i < nActors; i++) {
     let group;
     if (i === half) group = 'broker';
     else if (i < half) group = 'A';
     else group = 'B';
-    actors.push({ id: i, name: `${group === 'broker' ? 'Broker' : 'A'+(i+1)}`, group });
+    const level = levels[i % levels.length];
+    actors.push({
+      id: i,
+      name: group === 'broker' ? 'Broker' : `${group}${i + 1}`,
+      group,
+      attributes: { group, level },
+    });
   }
   // Re-label B group properly
   let bi = 1;
@@ -91,7 +100,7 @@ export function generateSyntheticREM({
   }
 
   events.sort((a, b) => a.time - b.time);
-  return { actors, events, duration };
+  return { actors, events, duration, attributes: ['group', 'level'] };
 }
 
 export function parseCSV(text) {
@@ -135,11 +144,10 @@ export function parseCSV(text) {
   const duration = tMax - tMin || 1;
 
   // No group info available from CSV, so alternate A/B for visual variety.
-  const actors = Array.from(actorIds).map((id, i) => ({
-    id,
-    name: String(id),
-    group: i % 3 === 0 ? 'broker' : (i % 2 === 1 ? 'A' : 'B'),
-  }));
+  const actors = Array.from(actorIds).map((id, i) => {
+    const group = i % 3 === 0 ? 'broker' : (i % 2 === 1 ? 'A' : 'B');
+    return { id, name: String(id), group, attributes: { group } };
+  });
 
-  return { actors, events: shifted, duration };
+  return { actors, events: shifted, duration, attributes: ['group'] };
 }

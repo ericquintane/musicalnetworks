@@ -10,9 +10,12 @@ A relational event has the form `(time, sender, receiver, type)`: who did what t
 
 - Six style presets: **Chamber**, **Electronic**, **Ambient**, **Percussive / world**, **Jazz**, **Drone**.
 - Five bundled public datasets (see below).
-- Real-time playback with synced network visualisation: nodes pulse and arcs flash for each event.
+- **Sound Mapping**: pick which actor attribute drives **Register** (octave), **Instrument**, and **Mode** (musical color, Lydian → Ionian → Mixolydian → Dorian → Aeolian → Phrygian → Locrian from brightest to darkest). Lets categorical and ordinal attributes (department, hierarchy, role) shape the sound.
+- **Mute / solo per group**: click chips below the viz to silence groups.
+- **Three visualisations** as tabs: circular network (with synced flashes), chord diagram (aggregate group-to-group structure), piano roll (time × actor, with playhead).
+- **Save piece as URL**: every UI choice is reflected in the URL hash. Copy-link button included.
 - Duration picker (30 s to 10 min) compresses or stretches any piece without changing its musical character.
-- Synthetic REM generator with bursty timing, two groups, and a broker.
+- Synthetic REM generator with bursty timing, two groups, three seniority levels, and a broker.
 - CSV upload for your own data.
 - MIDI export to take a piece into Ableton, Logic, Reaper, etc.
 - R helpers for piping REM data straight from your R workflow.

@@ -30,9 +30,18 @@
       </div>
       <p id="summary" class="muted small"></p>
       <p id="dataset-credit" class="muted small"></p>
-      <div class="viz-wrap">
-        <svg id="network-viz" aria-label="Network visualisation" role="img"></svg>
+      <div class="viz-tabs" role="tablist">
+        <button class="viz-tab active" data-viz="network">Network</button>
+        <button class="viz-tab" data-viz="chord">Chord</button>
+        <button class="viz-tab" data-viz="piano">Piano roll</button>
       </div>
+      <div class="viz-wrap">
+        <svg id="network-viz" class="viz-canvas" data-viz="network" aria-label="Network visualisation" role="img"></svg>
+        <svg id="chord-viz" class="viz-canvas" data-viz="chord" hidden></svg>
+        <svg id="piano-roll" class="viz-canvas viz-canvas-wide" data-viz="piano" hidden></svg>
+      </div>
+      <p class="muted small mute-hint">Mute groups by clicking on them.</p>
+      <div id="mute-panel" class="mute-panel"></div>
     </section>
 
     <section>
@@ -59,11 +68,31 @@
     </section>
 
     <section>
-      <h2>3. Listen</h2>
+      <h2>3. Sound mapping</h2>
+      <p class="muted small">Pick which attribute drives each musical dimension. Defaults reproduce the original mapping (groups → register, event types → instrument).</p>
+      <div class="row">
+        <label class="field">
+          Register
+          <select id="map-register"></select>
+        </label>
+        <label class="field">
+          Instrument
+          <select id="map-instrument"></select>
+        </label>
+        <label class="field">
+          Mode
+          <select id="map-mode"></select>
+        </label>
+      </div>
+    </section>
+
+    <section>
+      <h2>4. Listen</h2>
       <div class="row">
         <button id="play" class="primary">Play</button>
         <button id="stop">Stop</button>
         <button id="download-midi">Download MIDI</button>
+        <button id="copy-link">Copy link to this piece</button>
         <span id="status" class="muted small"></span>
       </div>
       <div id="now-playing" class="now-playing muted small"></div>
@@ -72,9 +101,9 @@
 
   <footer>
     <p>
-      Each actor gets a pitch in the chosen scale, with groups placed in different registers.
+      Each actor gets a pitch in the chosen scale, with the Register attribute setting their octave.
       Each event plays the sender's note answered by the receiver's note as a harmonic interval.
-      Event types choose the instrument. Time of events drives onset; bursts become flurries, lulls become rests.
+      Instrument and Mode mappings let categorical or ordinal attributes (department, hierarchy, etc.) shape the sound.
     </p>
     <p class="small">
       <a href="https://github.com/ericquintane/musicalnetworks">Source on GitHub</a>.

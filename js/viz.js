@@ -44,20 +44,31 @@ function layout(actors) {
   return m;
 }
 
-// Assign each unique group a distinct HSL color, spread evenly around the wheel.
-function buildGroupColors(actors) {
-  const groups = [...new Set(actors.map(a => a.group ?? 'default'))].sort();
+function attrValue(actor, key) {
+  if (!actor || !key) return undefined;
+  if (actor.attributes && key in actor.attributes) return actor.attributes[key];
+  if (key === 'group') return actor.group;
+  return undefined;
+}
+
+// Assign each unique value of `colorKey` a distinct HSL color.
+function buildColors(actors, colorKey) {
+  const values = [...new Set(actors.map(a => attrValue(a, colorKey) ?? 'default'))].sort();
   const colors = new Map();
-  groups.forEach((g, i) => {
-    const hue = Math.round((i / Math.max(groups.length, 1)) * 320);
-    colors.set(g, `hsl(${hue}, 55%, 55%)`);
+  values.forEach((v, i) => {
+    const hue = Math.round((i / Math.max(values.length, 1)) * 320);
+    colors.set(v, `hsl(${hue}, 55%, 55%)`);
   });
   return colors;
 }
 
-export function renderNetwork(svg, actors) {
+export function colorsForActors(actors, colorKey) {
+  return buildColors(actors, colorKey);
+}
+
+export function renderNetwork(svg, actors, colorKey = 'group', mutedValues = new Set()) {
   positions = layout(actors);
-  const colors = buildGroupColors(actors);
+  const colors = buildColors(actors, colorKey);
   const nodeR = nodeRadiusFor(actors.length);
   const fontSize = fontSizeFor(actors.length);
 
@@ -72,9 +83,13 @@ export function renderNetwork(svg, actors) {
     g.setAttribute('data-id', String(a.id));
     g.setAttribute('class', 'viz-node');
 
+    const value = attrValue(a, colorKey) ?? 'default';
+    const isMuted = mutedValues.has(value);
+
     const circle = document.createElementNS(NS, 'circle');
     circle.setAttribute('r', String(nodeR));
-    circle.setAttribute('fill', colors.get(a.group ?? 'default') || '#888');
+    circle.setAttribute('fill', colors.get(value) || '#888');
+    circle.setAttribute('opacity', isMuted ? '0.2' : '1');
     circle.setAttribute('data-base-r', String(nodeR));
     g.appendChild(circle);
 
@@ -84,6 +99,7 @@ export function renderNetwork(svg, actors) {
       text.setAttribute('text-anchor', 'middle');
       text.setAttribute('dy', '0.35em');
       text.setAttribute('font-size', String(fontSize));
+      text.setAttribute('opacity', isMuted ? '0.4' : '1');
       g.appendChild(text);
     }
 

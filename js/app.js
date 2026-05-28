@@ -1,8 +1,10 @@
 import { generateSyntheticREM, parseCSV } from './data.js';
 import { STYLES } from './styles.js';
-import { buildMusicalEvents } from './mapping.js';
+import { buildMusicalEvents, availableAttributeKeys, distinctValues, attributeValue } from './mapping.js';
 import { play, stop } from './player.js';
-import { renderNetwork, flashEvent } from './viz.js';
+import { renderNetwork, flashEvent, colorsForActors } from './viz.js';
+import { renderChord } from './chord_viz.js';
+import { renderPianoRoll, updatePianoPlayhead, resetPianoPlayhead } from './piano_roll.js';
 import { exportMIDI } from './midi.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -16,40 +18,51 @@ const DATASETS = [
   { key: 'radoslaw',       label: 'Manufacturing email (Radoslaw)' },
 ];
 
-let currentREM = generateSyntheticREM();
-let currentStyle = 'chamber';
-let currentDuration = ''; // empty string = match style default
-let currentDatasetKey = 'synthetic';
+// ---- State ----------------------------------------------------------------
+const state = {
+  datasetKey: 'synthetic',
+  rem: null,
+  style: 'chamber',
+  duration: '',                              // '' = use style default
+  mapping: { register: null, instrument: 'type', mode: 'none' },
+  muted: new Set(),
+};
 let isPlaying = false;
+let currentViz = 'network';
+let playheadRAF = null;
 
-function refreshSummary() {
-  $('#summary').textContent =
-    `${currentREM.actors.length} actors · ${currentREM.events.length} events · ` +
-    `original duration ${formatDuration(currentREM.duration)}.`;
+// ---- Hash sync ------------------------------------------------------------
+function readHash() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  return {
+    d:   p.get('d') || '',
+    s:   p.get('s') || '',
+    t:   p.get('t') || '',
+    r:   p.get('r') || '',
+    i:   p.get('i') || '',
+    mo:  p.get('mo') || '',
+    mu:  (p.get('mu') || '').split(',').map(decodeURIComponent).filter(Boolean),
+  };
+}
+let writingHash = false;
+function writeHash() {
+  if (writingHash) return;
+  writingHash = true;
+  const p = new URLSearchParams();
+  if (state.datasetKey && state.datasetKey !== 'synthetic') p.set('d', state.datasetKey);
+  if (state.style && state.style !== 'chamber')             p.set('s', state.style);
+  if (state.duration)                                       p.set('t', state.duration);
+  if (state.mapping.register)                               p.set('r', state.mapping.register);
+  if (state.mapping.instrument && state.mapping.instrument !== 'type') p.set('i', state.mapping.instrument);
+  if (state.mapping.mode && state.mapping.mode !== 'none')  p.set('mo', state.mapping.mode);
+  if (state.muted.size) p.set('mu', [...state.muted].map(encodeURIComponent).join(','));
+  const h = p.toString();
+  const url = h ? `${location.pathname}#${h}` : location.pathname;
+  history.replaceState(null, '', url);
+  writingHash = false;
 }
 
-function formatDuration(seconds) {
-  if (seconds < 90)    return `${seconds.toFixed(0)} s`;
-  if (seconds < 5400)  return `${(seconds / 60).toFixed(1)} min`;
-  if (seconds < 86400) return `${(seconds / 3600).toFixed(1)} h`;
-  return `${(seconds / 86400).toFixed(1)} days`;
-}
-
-function renderViz() { renderNetwork($('#network-viz'), currentREM.actors); }
-
-function refreshCredit() {
-  const el = $('#dataset-credit');
-  if (currentREM.credit) {
-    el.innerHTML = `<strong>${escape(currentREM.name || '')}.</strong> ${escape(currentREM.description || '')} <em>${escape(currentREM.credit)}</em> ${escape(currentREM.license || '')}`;
-  } else {
-    el.textContent = '';
-  }
-}
-
-function escape(s) {
-  return String(s).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
-}
-
+// ---- Data loading ---------------------------------------------------------
 async function loadDataset(key) {
   if (key === 'synthetic') return generateSyntheticREM();
   const res = await fetch(`data/${key}.json`);
@@ -57,44 +70,175 @@ async function loadDataset(key) {
   return await res.json();
 }
 
+// ---- Sound Mapping panel --------------------------------------------------
+function rebuildMappingPanel() {
+  const attrs = availableAttributeKeys(state.rem);
+
+  fillSelect($('#map-register'),   [...attrs, 'none'],          state.mapping.register || attrs[0]);
+  fillSelect($('#map-instrument'), ['type', ...attrs, 'none'],   state.mapping.instrument || 'type');
+  fillSelect($('#map-mode'),       ['none', ...attrs],          state.mapping.mode || 'none');
+
+  // Update internal state to match selects (in case defaults shifted on dataset change).
+  state.mapping.register   = $('#map-register').value;
+  state.mapping.instrument = $('#map-instrument').value;
+  state.mapping.mode       = $('#map-mode').value;
+}
+
+function fillSelect(el, options, selected) {
+  el.innerHTML = '';
+  for (const opt of options) {
+    const o = document.createElement('option');
+    o.value = opt;
+    o.textContent = opt;
+    el.appendChild(o);
+  }
+  if (selected != null && [...el.options].some(o => o.value === selected)) {
+    el.value = selected;
+  } else {
+    el.value = options[0];
+  }
+}
+
+// ---- Mute panel -----------------------------------------------------------
+function rebuildMutePanel() {
+  const panel = $('#mute-panel');
+  panel.innerHTML = '';
+  const key = state.mapping.register;
+  if (!key || key === 'none') {
+    panel.innerHTML = '<span class="muted small">No register attribute selected.</span>';
+    return;
+  }
+  const values = distinctValues(state.rem.actors, key);
+  const colors = colorsForActors(state.rem.actors, key);
+  for (const v of values) {
+    const chip = document.createElement('button');
+    chip.className = 'mute-chip' + (state.muted.has(v) ? ' muted' : '');
+    chip.textContent = v;
+    chip.style.background = colors.get(v);
+    chip.title = `Click to ${state.muted.has(v) ? 'unmute' : 'mute'} ${key}=${v}`;
+    chip.addEventListener('click', () => {
+      if (state.muted.has(v)) state.muted.delete(v); else state.muted.add(v);
+      rebuildMutePanel();
+      renderViz();
+      writeHash();
+    });
+    panel.appendChild(chip);
+  }
+}
+
+// ---- Viz ------------------------------------------------------------------
+function activeRegisterKey() {
+  return state.mapping.register || availableAttributeKeys(state.rem)[0] || 'group';
+}
+
+function renderViz() {
+  const key = activeRegisterKey();
+  if (currentViz === 'network') {
+    renderNetwork($('#network-viz'), state.rem.actors, key, state.muted);
+  } else if (currentViz === 'chord') {
+    renderChord($('#chord-viz'), state.rem, key, state.muted);
+  } else if (currentViz === 'piano') {
+    renderPianoRoll($('#piano-roll'), state.rem, key, state.muted);
+  }
+}
+
+function switchViz(mode) {
+  currentViz = mode;
+  document.querySelectorAll('.viz-tab').forEach(t => t.classList.toggle('active', t.dataset.viz === mode));
+  document.querySelectorAll('.viz-canvas').forEach(c => c.hidden = c.dataset.viz !== mode);
+  renderViz();
+}
+
+function startPlayheadLoop() {
+  cancelAnimationFrame(playheadRAF);
+  const Tone = window.Tone;
+  const totalDuration = effectiveStyle().durationSeconds;
+  const tick = () => {
+    if (!isPlaying) return;
+    if (currentViz === 'piano') {
+      const t = Tone.Transport.seconds;
+      updatePianoPlayhead($('#piano-roll'), t / Math.max(totalDuration, 0.001));
+    }
+    playheadRAF = requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+function stopPlayheadLoop() {
+  cancelAnimationFrame(playheadRAF);
+  resetPianoPlayhead($('#piano-roll'));
+}
+
+// ---- Summary / credit ----------------------------------------------------
+function refreshSummary() {
+  $('#summary').textContent =
+    `${state.rem.actors.length} actors · ${state.rem.events.length} events · ` +
+    `original duration ${formatDuration(state.rem.duration)}.`;
+}
+function formatDuration(seconds) {
+  if (seconds < 90)    return `${seconds.toFixed(0)} s`;
+  if (seconds < 5400)  return `${(seconds / 60).toFixed(1)} min`;
+  if (seconds < 86400) return `${(seconds / 3600).toFixed(1)} h`;
+  return `${(seconds / 86400).toFixed(1)} days`;
+}
+function refreshCredit() {
+  const el = $('#dataset-credit');
+  const r = state.rem;
+  if (r && r.credit) {
+    el.innerHTML = `<strong>${escape(r.name || '')}.</strong> ${escape(r.description || '')} <em>${escape(r.credit)}</em> ${escape(r.license || '')}`;
+  } else {
+    el.textContent = '';
+  }
+}
+function escape(s) {
+  return String(s).replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
+}
+
+// ---- Playback ------------------------------------------------------------
 function effectiveStyle() {
-  const base = STYLES[currentStyle];
-  const dur = parseFloat(currentDuration);
+  const base = STYLES[state.style];
+  const dur = parseFloat(state.duration);
   if (!dur) return base;
   return { ...base, durationSeconds: dur };
 }
-
 function onTick(musicalEvent) {
-  flashEvent($('#network-viz'), musicalEvent.raw.sender, musicalEvent.raw.receiver);
-  const sName = currentREM.actors.find(a => String(a.id) === String(musicalEvent.raw.sender))?.name || musicalEvent.raw.sender;
-  const rName = currentREM.actors.find(a => String(a.id) === String(musicalEvent.raw.receiver))?.name || musicalEvent.raw.receiver;
+  if (currentViz === 'network') {
+    flashEvent($('#network-viz'), musicalEvent.raw.sender, musicalEvent.raw.receiver);
+  }
+  const sName = state.rem.actors.find(a => String(a.id) === String(musicalEvent.raw.sender))?.name || musicalEvent.raw.sender;
+  const rName = state.rem.actors.find(a => String(a.id) === String(musicalEvent.raw.receiver))?.name || musicalEvent.raw.receiver;
   $('#now-playing').textContent = `${sName} → ${rName}  (${musicalEvent.raw.type})`;
 }
-
 function setStatus(text) { $('#status').textContent = text; }
-
-function setPlaying(state) {
-  isPlaying = state;
-  $('#play').textContent = state ? 'Playing…' : 'Play';
-  $('#play').disabled = state;
-  setStatus(state ? 'Playing.' : '');
+function setPlaying(s) {
+  isPlaying = s;
+  $('#play').textContent = s ? 'Playing…' : 'Play';
+  $('#play').disabled = s;
+  setStatus(s ? 'Playing.' : '');
+}
+function buildMusical() {
+  return buildMusicalEvents(state.rem, effectiveStyle(), state.mapping, state.muted);
 }
 
+// ---- Event wiring --------------------------------------------------------
 $('#play').addEventListener('click', async () => {
   if (isPlaying) return;
   const style = effectiveStyle();
-  const musical = buildMusicalEvents(currentREM, style);
+  const musical = buildMusical();
   if (!musical.length) { setStatus('No events to play.'); return; }
   setPlaying(true);
+  startPlayheadLoop();
   try {
     await play(musical, style, onTick, () => {
       setPlaying(false);
       $('#now-playing').textContent = '';
+      stopPlayheadLoop();
     });
   } catch (err) {
     console.error(err);
     setStatus('Error: ' + err.message);
     setPlaying(false);
+    stopPlayheadLoop();
   }
 });
 
@@ -102,13 +246,14 @@ $('#stop').addEventListener('click', () => {
   stop();
   setPlaying(false);
   $('#now-playing').textContent = '';
+  stopPlayheadLoop();
 });
 
 $('#download-midi').addEventListener('click', () => {
   const style = effectiveStyle();
-  const musical = buildMusicalEvents(currentREM, style);
+  const musical = buildMusical();
   try {
-    exportMIDI(musical, style, `musicalnetworks-${currentDatasetKey}-${currentStyle}.mid`);
+    exportMIDI(musical, style, `musicalnetworks-${state.datasetKey}-${state.style}.mid`);
     setStatus('MIDI downloaded.');
   } catch (err) {
     console.error(err);
@@ -116,35 +261,60 @@ $('#download-midi').addEventListener('click', () => {
   }
 });
 
+$('#copy-link').addEventListener('click', async () => {
+  writeHash();
+  try {
+    await navigator.clipboard.writeText(location.href);
+    setStatus('Link copied.');
+  } catch (e) {
+    setStatus('Copy failed — link is in the address bar.');
+  }
+});
+
 $('#style').addEventListener('change', (e) => {
-  currentStyle = e.target.value;
-  $('#style-desc').textContent = STYLES[currentStyle].description;
+  state.style = e.target.value;
+  $('#style-desc').textContent = STYLES[state.style].description;
+  writeHash();
 });
 
 $('#duration').addEventListener('change', (e) => {
-  currentDuration = e.target.value;
+  state.duration = e.target.value;
+  writeHash();
+});
+
+$('#map-register').addEventListener('change', (e) => {
+  state.mapping.register = e.target.value === 'none' ? 'none' : e.target.value;
+  // Register change resets mute (values may differ).
+  state.muted.clear();
+  rebuildMutePanel();
+  renderViz();
+  writeHash();
+});
+$('#map-instrument').addEventListener('change', (e) => {
+  state.mapping.instrument = e.target.value;
+  writeHash();
+});
+$('#map-mode').addEventListener('change', (e) => {
+  state.mapping.mode = e.target.value;
+  writeHash();
 });
 
 $('#regenerate').addEventListener('click', () => {
   stop();
   setPlaying(false);
-  currentREM = generateSyntheticREM();
-  refreshSummary();
-  refreshCredit();
-  renderViz();
+  state.rem = generateSyntheticREM();
+  refreshAfterDatasetChange();
 });
 
 $('#dataset').addEventListener('change', async (e) => {
   stop();
   setPlaying(false);
-  currentDatasetKey = e.target.value;
-  $('#regenerate').hidden = currentDatasetKey !== 'synthetic';
+  state.datasetKey = e.target.value;
+  $('#regenerate').hidden = state.datasetKey !== 'synthetic';
   setStatus('Loading…');
   try {
-    currentREM = await loadDataset(currentDatasetKey);
-    refreshSummary();
-    refreshCredit();
-    renderViz();
+    state.rem = await loadDataset(state.datasetKey);
+    refreshAfterDatasetChange();
     setStatus('');
   } catch (err) {
     setStatus('Error: ' + err.message);
@@ -156,41 +326,95 @@ $('#csv-upload').addEventListener('change', async (e) => {
   if (!file) return;
   try {
     const text = await file.text();
-    currentREM = parseCSV(text);
-    currentDatasetKey = 'csv';
-    $('#dataset').value = 'synthetic'; // reset dropdown UI; user uploads aren't in the list
+    state.rem = parseCSV(text);
+    state.datasetKey = 'csv';
+    $('#dataset').value = 'synthetic';
     $('#regenerate').hidden = true;
-    refreshSummary();
-    refreshCredit();
-    renderViz();
+    refreshAfterDatasetChange();
     setStatus(`Loaded ${file.name}.`);
   } catch (err) {
     setStatus('Error: ' + err.message);
   }
 });
 
-// Populate dataset dropdown.
-const datasetSelect = $('#dataset');
-for (const d of DATASETS) {
-  const opt = document.createElement('option');
-  opt.value = d.key;
-  opt.textContent = d.label;
-  datasetSelect.appendChild(opt);
+function refreshAfterDatasetChange() {
+  // Reset mapping to first attribute / type / none unless explicit values still valid.
+  const attrs = availableAttributeKeys(state.rem);
+  if (!attrs.includes(state.mapping.register) && state.mapping.register !== 'none') {
+    state.mapping.register = attrs[0] || 'group';
+  }
+  if (state.mapping.instrument !== 'type' && state.mapping.instrument !== 'none' && !attrs.includes(state.mapping.instrument)) {
+    state.mapping.instrument = 'type';
+  }
+  if (state.mapping.mode !== 'none' && !attrs.includes(state.mapping.mode)) {
+    state.mapping.mode = 'none';
+  }
+  state.muted.clear();
+  rebuildMappingPanel();
+  rebuildMutePanel();
+  refreshSummary();
+  refreshCredit();
+  renderViz();
+  writeHash();
 }
-datasetSelect.value = 'synthetic';
-$('#regenerate').hidden = false;
 
-// Populate style dropdown.
-const styleSelect = $('#style');
-for (const key of Object.keys(STYLES)) {
-  const opt = document.createElement('option');
-  opt.value = key;
-  opt.textContent = STYLES[key].name;
-  styleSelect.appendChild(opt);
+// ---- Init -----------------------------------------------------------------
+async function init() {
+  // Populate dataset and style dropdowns.
+  const datasetSelect = $('#dataset');
+  for (const d of DATASETS) {
+    const opt = document.createElement('option');
+    opt.value = d.key; opt.textContent = d.label;
+    datasetSelect.appendChild(opt);
+  }
+  const styleSelect = $('#style');
+  for (const key of Object.keys(STYLES)) {
+    const opt = document.createElement('option');
+    opt.value = key; opt.textContent = STYLES[key].name;
+    styleSelect.appendChild(opt);
+  }
+
+  // Read URL hash for initial state.
+  const hash = readHash();
+  if (hash.d && DATASETS.some(d => d.key === hash.d)) state.datasetKey = hash.d;
+  if (hash.s && STYLES[hash.s]) state.style = hash.s;
+  if (hash.t) state.duration = hash.t;
+
+  datasetSelect.value  = state.datasetKey;
+  styleSelect.value    = state.style;
+  $('#duration').value = state.duration;
+  $('#regenerate').hidden = state.datasetKey !== 'synthetic';
+  $('#style-desc').textContent = STYLES[state.style].description;
+
+  // Load dataset.
+  try {
+    state.rem = await loadDataset(state.datasetKey);
+  } catch (err) {
+    setStatus('Error: ' + err.message);
+    state.rem = generateSyntheticREM();
+    state.datasetKey = 'synthetic';
+    datasetSelect.value = 'synthetic';
+    $('#regenerate').hidden = false;
+  }
+
+  // Apply hash mapping where attribute keys are valid for the loaded dataset.
+  const attrs = availableAttributeKeys(state.rem);
+  if (hash.r && (hash.r === 'none' || attrs.includes(hash.r))) state.mapping.register = hash.r;
+  else state.mapping.register = attrs[0] || 'group';
+  if (hash.i && (hash.i === 'type' || hash.i === 'none' || attrs.includes(hash.i))) state.mapping.instrument = hash.i;
+  if (hash.mo && (hash.mo === 'none' || attrs.includes(hash.mo))) state.mapping.mode = hash.mo;
+  state.muted = new Set(hash.mu);
+
+  rebuildMappingPanel();
+  rebuildMutePanel();
+  refreshSummary();
+  refreshCredit();
+  renderViz();
+
+  // Tab switching.
+  document.querySelectorAll('.viz-tab').forEach(t => {
+    t.addEventListener('click', () => switchViz(t.dataset.viz));
+  });
 }
-styleSelect.value = currentStyle;
-$('#style-desc').textContent = STYLES[currentStyle].description;
 
-refreshSummary();
-refreshCredit();
-renderViz();
+init();
