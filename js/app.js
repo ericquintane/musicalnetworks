@@ -18,6 +18,39 @@ const DATASETS = [
   { key: 'radoslaw',       label: 'Manufacturing email (Radoslaw)' },
 ];
 
+const PRESETS = [
+  {
+    title: 'Hospital · hierarchy as modes',
+    sub: 'Roles in different octaves, ranks in different musical modes (bright → dark).',
+    hash: 'd=hospital&s=ambient&t=300&r=role&mo=rank',
+  },
+  {
+    title: 'Workplace · departments as instruments',
+    sub: 'Each department plays a different instrument over chamber music.',
+    hash: 'd=workplace&s=chamber&t=180&r=department&i=department',
+  },
+  {
+    title: 'Primary school · class & gender',
+    sub: 'Classes in different registers, gender drives the instrument.',
+    hash: 'd=primary_school&s=electronic&t=120&r=class&i=gender',
+  },
+  {
+    title: 'Manufacturing · slow drone',
+    sub: '80 actors, one busy month, stretched into a 10-minute drone piece.',
+    hash: 'd=radoslaw&s=drone&t=600',
+  },
+  {
+    title: 'EU research emails · ambient wash',
+    sub: '531 researchers across departments. Long sustained pads.',
+    hash: 'd=eu_core&s=ambient&t=300&r=department',
+  },
+  {
+    title: 'Synthetic · seniority modes',
+    sub: 'Built-in test data with three seniority levels driving the mode.',
+    hash: 'd=synthetic&s=chamber&t=120&r=group&mo=level',
+  },
+];
+
 // ---- State ----------------------------------------------------------------
 const state = {
   datasetKey: 'synthetic',
@@ -145,7 +178,9 @@ function renderViz() {
 function switchViz(mode) {
   currentViz = mode;
   document.querySelectorAll('.viz-tab').forEach(t => t.classList.toggle('active', t.dataset.viz === mode));
-  document.querySelectorAll('.viz-canvas').forEach(c => c.hidden = c.dataset.viz !== mode);
+  // SVGElement does not inherit HTMLElement.hidden, so the .hidden IDL
+  // property doesn't reflect to the attribute. Toggle the attribute directly.
+  document.querySelectorAll('.viz-canvas').forEach(c => c.toggleAttribute('hidden', c.dataset.viz !== mode));
   renderViz();
 }
 
@@ -358,8 +393,28 @@ function refreshAfterDatasetChange() {
   writeHash();
 }
 
+// ---- Presets -------------------------------------------------------------
+function renderPresets() {
+  const grid = $('#preset-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  for (const p of PRESETS) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'preset-btn';
+    b.innerHTML = `<span class="preset-title">${escape(p.title)}</span><span class="preset-sub">${escape(p.sub)}</span>`;
+    b.addEventListener('click', () => {
+      location.hash = p.hash;
+      location.reload();
+    });
+    grid.appendChild(b);
+  }
+}
+
 // ---- Init -----------------------------------------------------------------
 async function init() {
+  renderPresets();
+
   // Populate dataset and style dropdowns.
   const datasetSelect = $('#dataset');
   for (const d of DATASETS) {

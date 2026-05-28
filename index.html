@@ -9,27 +9,41 @@
   <script src="https://unpkg.com/@tonejs/midi@2.0.28/build/Midi.js"></script>
 </head>
 <body>
-  <header>
+  <header class="page-header">
     <h1>musicalnetworks</h1>
     <p class="tag">Turn a relational event sequence into music.</p>
   </header>
 
   <main>
-    <section>
-      <h2>1. Data</h2>
-      <div class="row">
+
+    <!-- Presets card -->
+    <section class="card preset-card">
+      <h2>Try a starting point</h2>
+      <p class="card-help">One click loads a curated combination of data, style, and sound mapping. Press Play after.</p>
+      <div class="preset-grid" id="preset-grid"></div>
+    </section>
+
+    <!-- Data card -->
+    <section class="card">
+      <h2>1 · Data</h2>
+      <div class="control-row">
         <label class="field">
-          Source
-          <select id="dataset"></select>
+          <span class="field-label">Source</span>
+          <select id="dataset" class="control"></select>
         </label>
-        <button id="regenerate" hidden>Regenerate</button>
+        <button id="regenerate" class="btn-secondary" hidden>Regenerate</button>
         <label class="upload">
-          or upload CSV
-          <input id="csv-upload" type="file" accept=".csv,text/csv">
+          <span class="field-label">Upload CSV</span>
+          <input id="csv-upload" type="file" accept=".csv,text/csv" class="control">
         </label>
       </div>
       <p id="summary" class="muted small"></p>
-      <p id="dataset-credit" class="muted small"></p>
+      <p id="dataset-credit" class="muted small dataset-credit"></p>
+    </section>
+
+    <!-- Visualisation card -->
+    <section class="card">
+      <h2>2 · Visualisation</h2>
       <div class="viz-tabs" role="tablist">
         <button class="viz-tab active" data-viz="network">Network</button>
         <button class="viz-tab" data-viz="chord">Chord</button>
@@ -37,23 +51,25 @@
       </div>
       <div class="viz-wrap">
         <svg id="network-viz" class="viz-canvas" data-viz="network" aria-label="Network visualisation" role="img"></svg>
-        <svg id="chord-viz" class="viz-canvas" data-viz="chord" hidden></svg>
-        <svg id="piano-roll" class="viz-canvas viz-canvas-wide" data-viz="piano" hidden></svg>
+        <svg id="chord-viz" class="viz-canvas" data-viz="chord" hidden aria-label="Chord diagram" role="img"></svg>
+        <svg id="piano-roll" class="viz-canvas viz-canvas-wide" data-viz="piano" hidden aria-label="Piano roll" role="img"></svg>
       </div>
-      <p class="muted small mute-hint">Mute groups by clicking on them.</p>
+      <p class="card-help" id="mute-hint">Mute a group by clicking it.</p>
       <div id="mute-panel" class="mute-panel"></div>
     </section>
 
-    <section>
-      <h2>2. Style and tempo</h2>
-      <div class="row">
+    <!-- Sound card -->
+    <section class="card">
+      <h2>3 · Sound</h2>
+
+      <div class="subgrid">
         <label class="field">
-          Style
-          <select id="style"></select>
+          <span class="field-label">Style</span>
+          <select id="style" class="control"></select>
         </label>
         <label class="field">
-          Duration
-          <select id="duration">
+          <span class="field-label">Duration</span>
+          <select id="duration" class="control">
             <option value="">Style default</option>
             <option value="30">30 seconds</option>
             <option value="60">1 minute</option>
@@ -65,38 +81,41 @@
         </label>
       </div>
       <p id="style-desc" class="muted small"></p>
-    </section>
 
-    <section>
-      <h2>3. Sound mapping</h2>
-      <p class="muted small">Pick which attribute drives each musical dimension. Defaults reproduce the original mapping (groups → register, event types → instrument).</p>
-      <div class="row">
-        <label class="field">
-          Register
-          <select id="map-register"></select>
-        </label>
-        <label class="field">
-          Instrument
-          <select id="map-instrument"></select>
-        </label>
-        <label class="field">
-          Mode
-          <select id="map-mode"></select>
-        </label>
+      <div class="sound-mapping">
+        <h3>Sound mapping</h3>
+        <p class="card-help">Choose which attribute drives each musical dimension. Default keeps groups in different octaves and event types on different instruments.</p>
+        <div class="subgrid">
+          <label class="field">
+            <span class="field-label">Register <span class="field-hint">— octave per value</span></span>
+            <select id="map-register" class="control"></select>
+          </label>
+          <label class="field">
+            <span class="field-label">Instrument <span class="field-hint">— sound per value</span></span>
+            <select id="map-instrument" class="control"></select>
+          </label>
+          <label class="field">
+            <span class="field-label">Mode <span class="field-hint">— bright→dark by attr</span></span>
+            <select id="map-mode" class="control"></select>
+          </label>
+        </div>
       </div>
     </section>
 
-    <section>
-      <h2>4. Listen</h2>
-      <div class="row">
-        <button id="play" class="primary">Play</button>
-        <button id="stop">Stop</button>
-        <button id="download-midi">Download MIDI</button>
-        <button id="copy-link">Copy link to this piece</button>
-        <span id="status" class="muted small"></span>
+    <!-- Playback card -->
+    <section class="card play-card">
+      <div class="play-main">
+        <button id="play" class="btn-play">▶ Play</button>
+        <button id="stop" class="btn-secondary">Stop</button>
+        <div id="now-playing" class="now-playing"></div>
       </div>
-      <div id="now-playing" class="now-playing muted small"></div>
+      <div class="play-extras">
+        <button id="download-midi" class="btn-link">Download MIDI</button>
+        <button id="copy-link" class="btn-link">Copy share link</button>
+        <span id="status" class="muted small status"></span>
+      </div>
     </section>
+
   </main>
 
   <footer>
