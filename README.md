@@ -2,7 +2,7 @@
 
 Turn a relational event sequence into music, in the browser.
 
-Live demo: **https://ericquintane.github.io/musicalnetworks/**
+Live demo: **https://www.quintane.net/musicalnetworks/** (also reachable at https://ericquintane.github.io/musicalnetworks/)
 
 A relational event has the form `(time, sender, receiver, type)`: who did what to whom, and when. This app maps those events to musical events: each actor gets a pitch in a chosen scale, each event plays the sender's note answered by the receiver's note as a harmonic interval, and event types pick the instrument. Bursts in the data become flurries; lulls become rests.
 
