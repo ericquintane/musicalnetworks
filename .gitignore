@@ -1,0 +1,6 @@
+# Raw downloaded datasets — not committed; recreate with scripts/preprocess.py
+tmp_raw/
+
+# macOS / editor noise
+.DS_Store
+*.swp

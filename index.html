@@ -17,25 +17,45 @@
   <main>
     <section>
       <h2>1. Data</h2>
-      <p id="summary" class="muted"></p>
       <div class="row">
-        <button id="regenerate">Regenerate synthetic data</button>
+        <label class="field">
+          Source
+          <select id="dataset"></select>
+        </label>
+        <button id="regenerate" hidden>Regenerate</button>
         <label class="upload">
           or upload CSV
           <input id="csv-upload" type="file" accept=".csv,text/csv">
         </label>
       </div>
-      <p class="muted small">CSV columns: <code>time, sender, receiver</code> (optional <code>type</code>, <code>weight</code>).</p>
+      <p id="summary" class="muted small"></p>
+      <p id="dataset-credit" class="muted small"></p>
       <div class="viz-wrap">
         <svg id="network-viz" aria-label="Network visualisation" role="img"></svg>
       </div>
     </section>
 
     <section>
-      <h2>2. Style</h2>
-      <label for="style" class="sr-only">Musical style</label>
-      <select id="style"></select>
-      <p id="style-desc" class="muted"></p>
+      <h2>2. Style and tempo</h2>
+      <div class="row">
+        <label class="field">
+          Style
+          <select id="style"></select>
+        </label>
+        <label class="field">
+          Duration
+          <select id="duration">
+            <option value="">Style default</option>
+            <option value="30">30 seconds</option>
+            <option value="60">1 minute</option>
+            <option value="120">2 minutes</option>
+            <option value="180">3 minutes</option>
+            <option value="300">5 minutes</option>
+            <option value="600">10 minutes</option>
+          </select>
+        </label>
+      </div>
+      <p id="style-desc" class="muted small"></p>
     </section>
 
     <section>

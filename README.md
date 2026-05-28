@@ -9,11 +9,25 @@ A relational event has the form `(time, sender, receiver, type)`: who did what t
 ## Features
 
 - Six style presets: **Chamber**, **Electronic**, **Ambient**, **Percussive / world**, **Jazz**, **Drone**.
+- Five bundled public datasets (see below).
 - Real-time playback with synced network visualisation: nodes pulse and arcs flash for each event.
+- Duration picker (30 s to 10 min) compresses or stretches any piece without changing its musical character.
 - Synthetic REM generator with bursty timing, two groups, and a broker.
 - CSV upload for your own data.
 - MIDI export to take a piece into Ableton, Logic, Reaper, etc.
 - R helpers for piping REM data straight from your R workflow.
+
+## Bundled datasets
+
+| Dataset | Source | License |
+|---|---|---|
+| Workplace | SocioPatterns: Génois & Barrat, EPJ Data Science 7:11 (2018) | CC0 |
+| Hospital ward | SocioPatterns: Vanhems et al., PLoS ONE 8(9):e73970 (2013) | CC BY-NC-SA 4.0 |
+| Primary school | SocioPatterns: Stehlé et al., PLoS ONE 6(8):e23176 (2011) | CC BY-NC-SA 4.0 |
+| EU research emails | SNAP: Paranjape, Benson & Leskovec, WSDM 2017 | Academic use with citation |
+| Manufacturing email | Michalski, Palus & Kazienko, HCI 2011 (Radoslaw) | Academic use with citation |
+
+Preprocessing is reproducible via [scripts/preprocess.py](scripts/preprocess.py); each output JSON carries its `credit` and `license` strings, which the app surfaces in the UI. See [data/README.md](data/README.md) for schema and citation details.
 
 ## Run locally
 

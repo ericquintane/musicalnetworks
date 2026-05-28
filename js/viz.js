@@ -5,26 +5,62 @@
 
 const NS = 'http://www.w3.org/2000/svg';
 const SIZE = 400;
-const RADIUS = 150;
 
 let positions = new Map();
+
+function radiusFor(n) {
+  // Shrink slightly for huge networks so labels still fit.
+  if (n > 200) return 160;
+  if (n > 100) return 165;
+  return 150;
+}
+
+function nodeRadiusFor(n) {
+  if (n > 200) return 4;
+  if (n > 100) return 6;
+  if (n > 50)  return 10;
+  return 14;
+}
+
+function fontSizeFor(n) {
+  if (n > 200) return 0;   // hide labels entirely on dense networks
+  if (n > 100) return 7;
+  if (n > 50)  return 9;
+  return 11;
+}
 
 function layout(actors) {
   const m = new Map();
   const n = actors.length || 1;
+  const r = radiusFor(n);
   const cx = SIZE / 2, cy = SIZE / 2;
   actors.forEach((a, i) => {
     const angle = -Math.PI / 2 + (2 * Math.PI * i) / n;
     m.set(String(a.id), {
-      x: cx + RADIUS * Math.cos(angle),
-      y: cy + RADIUS * Math.sin(angle),
+      x: cx + r * Math.cos(angle),
+      y: cy + r * Math.sin(angle),
     });
   });
   return m;
 }
 
+// Assign each unique group a distinct HSL color, spread evenly around the wheel.
+function buildGroupColors(actors) {
+  const groups = [...new Set(actors.map(a => a.group ?? 'default'))].sort();
+  const colors = new Map();
+  groups.forEach((g, i) => {
+    const hue = Math.round((i / Math.max(groups.length, 1)) * 320);
+    colors.set(g, `hsl(${hue}, 55%, 55%)`);
+  });
+  return colors;
+}
+
 export function renderNetwork(svg, actors) {
   positions = layout(actors);
+  const colors = buildGroupColors(actors);
+  const nodeR = nodeRadiusFor(actors.length);
+  const fontSize = fontSizeFor(actors.length);
+
   svg.setAttribute('viewBox', `0 0 ${SIZE} ${SIZE}`);
   svg.innerHTML = '<g id="viz-edges"></g><g id="viz-nodes"></g>';
   const nodes = svg.querySelector('#viz-nodes');
@@ -34,17 +70,22 @@ export function renderNetwork(svg, actors) {
     const g = document.createElementNS(NS, 'g');
     g.setAttribute('transform', `translate(${pos.x.toFixed(1)}, ${pos.y.toFixed(1)})`);
     g.setAttribute('data-id', String(a.id));
-    g.setAttribute('class', `viz-node group-${a.group}`);
+    g.setAttribute('class', 'viz-node');
 
     const circle = document.createElementNS(NS, 'circle');
-    circle.setAttribute('r', '14');
+    circle.setAttribute('r', String(nodeR));
+    circle.setAttribute('fill', colors.get(a.group ?? 'default') || '#888');
+    circle.setAttribute('data-base-r', String(nodeR));
     g.appendChild(circle);
 
-    const text = document.createElementNS(NS, 'text');
-    text.textContent = a.name;
-    text.setAttribute('text-anchor', 'middle');
-    text.setAttribute('dy', '0.35em');
-    g.appendChild(text);
+    if (fontSize > 0 && a.name) {
+      const text = document.createElementNS(NS, 'text');
+      text.textContent = a.name;
+      text.setAttribute('text-anchor', 'middle');
+      text.setAttribute('dy', '0.35em');
+      text.setAttribute('font-size', String(fontSize));
+      g.appendChild(text);
+    }
 
     nodes.appendChild(g);
   }
@@ -55,7 +96,6 @@ export function flashEvent(svg, senderId, receiverId) {
   const b = positions.get(String(receiverId));
   if (!a || !b) return;
 
-  // Pulse the sender and receiver nodes.
   svg.querySelectorAll('.viz-node').forEach(g => {
     if (g.dataset.id === String(senderId) || g.dataset.id === String(receiverId)) {
       g.classList.add('active');
@@ -64,7 +104,6 @@ export function flashEvent(svg, senderId, receiverId) {
     }
   });
 
-  // Draw an arc from sender to receiver that fades out.
   const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
   const dx = b.x - a.x, dy = b.y - a.y;
   const len = Math.max(1, Math.sqrt(dx * dx + dy * dy));

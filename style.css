@@ -70,6 +70,21 @@ select {
   color: #444;
 }
 
+.field {
+  display: inline-flex;
+  flex-direction: column;
+  font-size: 0.8rem;
+  color: #666;
+  gap: 0.15rem;
+}
+.field select {
+  font-size: 1rem;
+}
+
+#dataset-credit { margin: 0.25rem 0 0; line-height: 1.4; }
+#dataset-credit strong { color: #1a1a1a; }
+#dataset-credit em { font-style: italic; color: #555; }
+
 .muted { color: #666; }
 .small { font-size: 0.85rem; }
 code {
@@ -94,21 +109,16 @@ code {
 }
 .viz-node circle {
   stroke: #fff;
-  stroke-width: 2;
-  transition: r 0.15s, stroke-width 0.15s;
+  stroke-width: 1.5;
+  transition: stroke-width 0.15s, stroke 0.15s;
 }
-.viz-node.group-A circle { fill: #6b8ed6; }
-.viz-node.group-B circle { fill: #e08e4c; }
-.viz-node.group-broker circle { fill: #a07ad6; }
 .viz-node text {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  font-size: 11px;
   fill: white;
   font-weight: 600;
   pointer-events: none;
 }
 .viz-node.active circle {
-  r: 19;
   stroke-width: 3;
   stroke: #ffd166;
 }
