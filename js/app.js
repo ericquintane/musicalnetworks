@@ -165,14 +165,14 @@ function activeRegisterKey() {
 }
 
 function renderViz() {
+  // Render all three vizes so switching tabs is instant and stays in sync
+  // with the current data / mapping / mute state. Each render is cheap
+  // (10-100ms even on the dense datasets); doing it once on each change
+  // beats showing stale content the moment a tab is switched.
   const key = activeRegisterKey();
-  if (currentViz === 'network') {
-    renderNetwork($('#network-viz'), state.rem.actors, key, state.muted);
-  } else if (currentViz === 'chord') {
-    renderChord($('#chord-viz'), state.rem, key, state.muted);
-  } else if (currentViz === 'piano') {
-    renderPianoRoll($('#piano-roll'), state.rem, key, state.muted);
-  }
+  renderNetwork($('#network-viz'), state.rem.actors, key, state.muted);
+  renderChord($('#chord-viz'), state.rem, key, state.muted);
+  renderPianoRoll($('#piano-roll'), state.rem, key, state.muted);
 }
 
 function switchViz(mode) {
@@ -181,6 +181,9 @@ function switchViz(mode) {
   // SVGElement does not inherit HTMLElement.hidden, so the .hidden IDL
   // property doesn't reflect to the attribute. Toggle the attribute directly.
   document.querySelectorAll('.viz-canvas').forEach(c => c.toggleAttribute('hidden', c.dataset.viz !== mode));
+  // Show the relevant per-tab help line.
+  const active = document.querySelector(`.viz-tab[data-viz="${mode}"]`);
+  $('#viz-help').textContent = active ? (active.dataset.help || '') : '';
   renderViz();
 }
 
@@ -470,6 +473,9 @@ async function init() {
   document.querySelectorAll('.viz-tab').forEach(t => {
     t.addEventListener('click', () => switchViz(t.dataset.viz));
   });
+  // Seed initial tab help text.
+  const initialActive = document.querySelector('.viz-tab.active');
+  if (initialActive) $('#viz-help').textContent = initialActive.dataset.help || '';
 }
 
 init();

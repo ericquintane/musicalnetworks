@@ -45,10 +45,11 @@
     <section class="card">
       <h2>2 · Visualisation</h2>
       <div class="viz-tabs" role="tablist">
-        <button class="viz-tab active" data-viz="network">Network</button>
-        <button class="viz-tab" data-viz="chord">Chord</button>
-        <button class="viz-tab" data-viz="piano">Piano roll</button>
+        <button class="viz-tab active" data-viz="network" data-help="Each actor is a node arranged on a circle, colored by the Register attribute. During playback, sender and receiver pulse and a fading arc links them.">Network</button>
+        <button class="viz-tab" data-viz="chord" data-help="Aggregate chord diagram: arc length = total events involving each group of the Register attribute; ribbons = inter-group event counts. Shows interaction structure, not sound choices.">Chord</button>
+        <button class="viz-tab" data-viz="piano" data-help="Time on the horizontal axis, actors stacked vertically and banded by Register. Each event is a vertical line from sender to receiver. A yellow playhead scrolls during playback.">Piano roll</button>
       </div>
+      <p id="viz-help" class="viz-help"></p>
       <div class="viz-wrap">
         <svg id="network-viz" class="viz-canvas" data-viz="network" aria-label="Network visualisation" role="img"></svg>
         <svg id="chord-viz" class="viz-canvas" data-viz="chord" hidden aria-label="Chord diagram" role="img"></svg>
@@ -102,20 +103,6 @@
       </div>
     </section>
 
-    <!-- Playback card -->
-    <section class="card play-card">
-      <div class="play-main">
-        <button id="play" class="btn-play">▶ Play</button>
-        <button id="stop" class="btn-secondary">Stop</button>
-        <div id="now-playing" class="now-playing"></div>
-      </div>
-      <div class="play-extras">
-        <button id="download-midi" class="btn-link">Download MIDI</button>
-        <button id="copy-link" class="btn-link">Copy share link</button>
-        <span id="status" class="muted small status"></span>
-      </div>
-    </section>
-
   </main>
 
   <footer>
@@ -129,6 +116,18 @@
       Built with <a href="https://tonejs.github.io/">Tone.js</a>.
     </p>
   </footer>
+
+  <!-- Fixed playback bar: always accessible from any scroll position. -->
+  <div class="play-bar">
+    <button id="play" class="btn-play">▶ Play</button>
+    <button id="stop" class="btn-secondary btn-stop">Stop</button>
+    <div id="now-playing" class="now-playing"></div>
+    <div class="play-bar-actions">
+      <button id="download-midi" class="btn-link">MIDI</button>
+      <button id="copy-link" class="btn-link">Share</button>
+    </div>
+    <span id="status" class="muted small status"></span>
+  </div>
 
   <script type="module" src="js/app.js"></script>
 </body>
