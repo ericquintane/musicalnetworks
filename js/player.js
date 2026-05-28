@@ -5,6 +5,18 @@ const T = () => window.Tone;
 let instruments = null;
 let part = null;
 
+// PolySynth voice-budget headroom. Tone.js defaults to 32, which collapses
+// quickly on dense REM data (>100 events/sec with multi-second releases).
+// 256 covers typical bundled datasets at reasonable durations; the play()
+// function additionally shortens release times when density would still
+// exceed this budget.
+const POLY = 256;
+
+function withPoly(synth) {
+  synth.maxPolyphony = POLY;
+  return synth.toDestination();
+}
+
 // Each preset declares how it plays:
 //   percussion: true  -> pitch is ignored, fixed hit
 //   percussion: false -> pitch comes from the event
@@ -15,69 +27,77 @@ function presetFactories() {
   return {
     string: {
       percussion: false,
-      factory: () => new Tone.PolySynth(Tone.Synth, {
+      release: 1.4,
+      factory: () => withPoly(new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: 'triangle' },
         envelope: { attack: 0.08, decay: 0.2, sustain: 0.6, release: 1.4 },
         volume: -10,
-      }).toDestination(),
+      })),
     },
     pad: {
       percussion: false,
-      factory: () => new Tone.PolySynth(Tone.Synth, {
+      release: 3.5,
+      factory: () => withPoly(new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: 'sine' },
         envelope: { attack: 0.6, decay: 0.4, sustain: 0.8, release: 3.5 },
         volume: -14,
-      }).toDestination(),
+      })),
     },
     pluck: {
       percussion: false,
-      factory: () => new Tone.PolySynth(Tone.Synth, {
+      release: 0.4,
+      factory: () => withPoly(new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: 'triangle' },
         envelope: { attack: 0.005, decay: 0.25, sustain: 0.0, release: 0.4 },
         volume: -8,
-      }).toDestination(),
+      })),
     },
     lead: {
       percussion: false,
-      factory: () => new Tone.PolySynth(Tone.Synth, {
+      release: 0.3,
+      factory: () => withPoly(new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: 'sawtooth' },
         envelope: { attack: 0.01, decay: 0.2, sustain: 0.25, release: 0.3 },
         volume: -14,
-      }).toDestination(),
+      })),
     },
     bass: {
       percussion: false,
-      factory: () => new Tone.PolySynth(Tone.Synth, {
+      release: 0.25,
+      factory: () => withPoly(new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: 'square' },
         envelope: { attack: 0.01, decay: 0.15, sustain: 0.35, release: 0.25 },
         volume: -12,
-      }).toDestination(),
+      })),
     },
     bell: {
       percussion: false,
-      factory: () => new Tone.PolySynth(Tone.FMSynth, {
+      release: 2.5,
+      factory: () => withPoly(new Tone.PolySynth(Tone.FMSynth, {
         modulationIndex: 10,
         envelope: { attack: 0.01, decay: 0.4, sustain: 0.0, release: 2.5 },
         volume: -16,
-      }).toDestination(),
+      })),
     },
     piano: {
       percussion: false,
-      factory: () => new Tone.PolySynth(Tone.FMSynth, {
+      release: 1.0,
+      factory: () => withPoly(new Tone.PolySynth(Tone.FMSynth, {
         harmonicity: 2,
         modulationIndex: 4,
         envelope: { attack: 0.005, decay: 0.6, sustain: 0.0, release: 1.0 },
         modulationEnvelope: { attack: 0.01, decay: 0.5, sustain: 0.0, release: 0.5 },
         volume: -10,
-      }).toDestination(),
+      })),
     },
     drone: {
       percussion: false,
-      factory: () => new Tone.PolySynth(Tone.Synth, {
+      release: 6.0,
+      factory: () => withPoly(new Tone.PolySynth(Tone.Synth, {
         oscillator: { type: 'sawtooth' },
         envelope: { attack: 2.0, decay: 1.0, sustain: 0.9, release: 6.0 },
         volume: -18,
-      }).toDestination(),
+      })),
     },
 
     // ---- Percussion ----
@@ -160,10 +180,35 @@ function buildInstruments(style, factories) {
         instance: def.factory(),
         percussion: def.percussion,
         hit: def.hit,
+        defaultRelease: def.release,
       };
     }
   }
   return map;
+}
+
+// Adapt to dense data: if the expected concurrent voice count would exceed our
+// polyphony budget, shorten the release of each tonal synth so voices return
+// to the pool faster. Cheap to evaluate, big audible win on dense datasets.
+function adaptToDensity(instruments, musicalEvents) {
+  if (musicalEvents.length < 2) return;
+  const total = musicalEvents[musicalEvents.length - 1].time - musicalEvents[0].time;
+  if (total <= 0) return;
+  const density = musicalEvents.length / total; // events / musical second
+  // We play sender + receiver per event, so voices per second ~ 2 * density.
+  const voicesPerSec = density * 2;
+  const budget = POLY * 0.7; // leave headroom for clustered bursts
+
+  for (const k of Object.keys(instruments)) {
+    const inst = instruments[k];
+    if (inst.percussion) continue;
+    const defaultRelease = inst.defaultRelease ?? 1.0;
+    const expected = voicesPerSec * defaultRelease;
+    if (expected <= budget) continue;
+    // Scale release so voicesPerSec * release == budget.
+    const newRelease = Math.max(0.05, budget / voicesPerSec);
+    try { inst.instance.set({ envelope: { release: newRelease } }); } catch (e) {}
+  }
 }
 
 export async function play(musicalEvents, style, onTick, onEnd) {
@@ -173,6 +218,7 @@ export async function play(musicalEvents, style, onTick, onEnd) {
 
   const factories = presetFactories();
   instruments = buildInstruments(style, factories);
+  adaptToDensity(instruments, musicalEvents);
   Tone.Transport.bpm.value = style.bpm || 90;
 
   part = new Tone.Part((time, value) => {
